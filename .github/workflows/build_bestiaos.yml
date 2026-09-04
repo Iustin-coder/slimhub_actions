@@ -13,45 +13,53 @@ jobs:
         sudo apt-get clean
         df -h
 
-    - name: Instaleaza Uneltele Android si Repo
+    - name: Instaleaza Uneltele Android
       run: |
         sudo apt-get update
-        sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev repo
+        sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev
 
     - name: Configureaza Identitatea Git
       run: |
         git config --global user.name "Creator BestiaOS"
         git config --global user.email "bestiaos@email.com"
 
-    - name: Descarca Sursa Light (LineageOS)
+    - name: Descarca Sursa Light (LineageOS direct prin Git)
       run: |
+        # Creăm folderul și descărcăm direct manifestul corect, evitând complet utilitarul Google Repo
         mkdir android
         cd android
-        repo init -u https://github.com -b lineage-19.1 --depth=1
-        repo sync -c -j$(nproc) --force-sync --no-clone-bundle --no-tags
+        git clone https://github.com -b lineage-19.1 .repo/manifests --depth=1
+        mkdir .repo/manifests/base
+        mv .repo/manifests/*.xml .repo/manifests/base/ 2>/dev/null || true
+        
+        # Descarcă structura de bază necesară pentru compilare
+        git clone https://github.com -b lineage-19.1 build/make --depth=1
 
     - name: Redenumeste in BestiaOS
       run: |
         cd android
-        # Schimbă numele din Android / LineageOS în BestiaOS
-        find build/make/core/ -type f -name "*.mk" -exec sed -i 's/LineageOS/BestiaOS/g' {} +
-        find build/make/core/ -type f -name "*.mk" -exec sed -i 's/Android/BestiaOS/g' {} +
+        # Schimbă numele din Android / LineageOS în BestiaOS în fișierele text de configurare
+        if [ -d build/make/core ]; then
+          find build/make/core/ -type f -name "*.mk" -exec sed -i 's/LineageOS/BestiaOS/g' {} +
+          find build/make/core/ -type f -name "*.mk" -exec sed -i 's/Android/BestiaOS/g' {} +
+        fi
 
     - name: Porneste Compilarea
       run: |
         cd android
+        # Pornim scriptul oficial de configurare din Android
         source build/envsetup.sh
         lunch lineage_generic_arm64-userdebug
-        make bacon -j$(nproc)
+        make systemimage -j$(nproc)
 
     - name: Incarca BestiaOS pe Internet (Link Gratuit)
       if: always()
       run: |
         cd android
-        echo "Se încarcă fișierul BestiaOS.zip..."
-        # Verifică dacă fișierul s-a creat și îl încarcă pe un server public
+        echo "Se încarcă fișierul BestiaOS..."
+        # Verifică dacă s-a creat vreo imagine de sistem și o urcă pe un server public
         if [ -d out/target/product ]; then
-          curl -T out/target/product/*/*.zip https://bashupload.com || echo "Eroare la încărcare"
+          curl -T out/target/product/*/*.img https://bashupload.com || echo "Eroare la încărcare"
         else
           echo "Compilarea nu a generat fișierul final. Verifică erorile de mai sus."
         fi
