@@ -1,0 +1,61 @@
+name: Compilare BestiaOS Gratuit
+
+on:
+  workflow_dispatch: # Îți permite să apeși manual pe butonul START de pe telefon
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Curata Serverul pentru Spatiu Maxim
+      run: |
+        docker rsync --version &>/dev/null || true
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf /etc/apt/sources.list.d/*
+        sudo apt-get clean
+        df -h
+
+    - name: Instaleaza Uneltele Android
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev
+
+    - name: Configureaza Utilitarul Repo
+      run: |
+        mkdir -p ~/bin
+        curl https://googleapis.com > ~/bin/repo
+        chmod a+x ~/bin/repo
+        sudo ln -sf ~/bin/repo /usr/bin/repo
+        git config --global user.name "Creator BestiaOS"
+        git config --global user.email "bestiaos@email.com"
+
+    - name: Descarca Sursa Light (LineageOS)
+      run: |
+        mkdir android
+        cd android
+        repo init -u https://github.com -b lineage-19.1 --depth=1
+        repo sync -c -j$(nproc) --force-sync --no-clone-bundle --no-tags
+
+    - name: Redenumeste in BestiaOS
+      run: |
+        cd android
+        # Schimbă numele din Android în BestiaOS în fișierele de configurare principale
+        find build/make/core/ -type f -name "*.mk" -exec sed -i 's/LineageOS/BestiaOS/g' {} +
+        find build/make/core/ -type f -name "*.mk" -exec sed -i 's/Android/BestiaOS/g' {} +
+
+    - name: Porneste Compilarea
+      run: |
+        cd android
+        source build/envsetup.sh
+        # NOTA: Înlocuiește 'generic_arm64' cu numele de cod al telefonului tău dacă îl știi
+        lunch lineage_generic_arm64-userdebug
+        make bacon -j$(nproc)
+
+    - name: Incarca BestiaOS pe Internet (Link Gratuit)
+      if: always()
+      run: |
+        cd android
+        echo "Se încarcă fișierul BestiaOS.zip..."
+        # Acest script caută ROM-ul compilat și îl urcă pe un server public gratuit de download
+        curl -T out/target/product/*/*.zip https://bashupload.com
